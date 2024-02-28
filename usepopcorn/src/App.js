@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import StarRating from "./StarRating";
+import { useMovies } from "./useMovies";
+import { useLocalStorageState } from "./useLocalStorageState";
+import { useKey } from "./useKey";
 
 const tempMovieData = [
 	{
@@ -47,14 +50,108 @@ const tempWatchedData = [
 		userRating: 9,
 	},
 ];
-
+const API_KEY = "7d047b2a";
 const average = (arr) =>
 	arr.reduce(
 		(acc, cur, i, arr) => acc + cur / arr.length,
 		0
 	);
 
-const API_KEY = "7d047b2a";
+	// const [movies, setMovies] = useState(tempMovieData);
+	// const [watched, setWatched] = useState(tempWatchedData);
+
+	const [query, setQuery] = useState("interstellar");
+	const [selectedId, setSelectedId] = useState(null);
+
+	const { movies, isLoading, error } = useMovies(
+		query,
+		handleCloseMovie
+	);
+
+	const [watched, setWatched] = useLocalStorageState(
+		[],
+		"watched"
+	);
+
+	function handleSelectMovie(id) {
+		setSelectedId((selectedId) =>
+			id === selectedId ? null : id
+		);
+	}
+
+	function handleCloseMovie() {
+		setSelectedId(null);
+	}
+
+	function handleAddMovie(movie) {
+		// if (length(watched.filter(m=> m.imdbID != m.imdbID)))
+		setWatched((watched) => [
+			...watched.filter((m) => m.imdbID !== movie.imdbID),
+			movie,
+		]);
+	}
+
+	useEffect(
+		function () {
+			localStorage.setItem(
+				"watched",
+				JSON.stringify(watched)
+			);
+		},
+		[watched]
+	);
+
+	return (
+		<>
+			{/* component composition */}
+			<NavBar>
+				<Search
+					query={query}
+					setQuery={setQuery}
+				></Search>
+				<NumResults movies={movies}></NumResults>
+			</NavBar>
+			<Main>
+				{/* Or, you can define prop explicity and pass in that way */}
+				<Box>
+					{/* {isLoading ? (
+						<Loader />
+					) : (
+						<MovieList movies={movies}></MovieList>
+					)} */}
+					{isLoading && <Loader />}
+					{!isLoading && !error && (
+						<MovieList
+							movies={movies}
+							handleSelectMovie={handleSelectMovie}
+						/>
+					)}
+					{error && <ErrorMessage message={error} />}
+				</Box>
+				<Box>
+					{selectedId ? (
+						<MovieDetails
+							selectedId={selectedId}
+							onCloseMovie={handleCloseMovie}
+							handleAddMovie={handleAddMovie}
+							watched={watched}
+							key={`movie-details-${selectedId}`}
+						/>
+					) : (
+						<>
+							<WatchedSummary
+								watched={watched}
+							></WatchedSummary>
+							<WatchedMovieList
+								watched={watched}
+							></WatchedMovieList>
+						</>
+					)}
+				</Box>
+			</Main>
+		</>
+	);
+}
 
 function MovieDetails({
 	selectedId,
@@ -66,13 +163,24 @@ function MovieDetails({
 	const [userRating, setUserRating] = useState("");
 	const [defaultRating, setDefaultRating] = useState(null);
 
+	const countRef = useRef(0);
+
+	useEffect(
+		function () {
+			if (userRating) {
+				countRef.current = countRef.current + 1;
+			}
+		},
+		[userRating]
+	);
+
 	const isWatched = watched
 		.map((m) => m.imdbID)
 		.includes(selectedId);
 	const watchedUserRating = watched.find(
 		(movie) => movie.imdbID === selectedId
 	)?.userRating;
-	console.log(isWatched);
+	// console.log(isWatched);
 
 	const {
 		Title: title,
@@ -96,30 +204,14 @@ function MovieDetails({
 			imdbRating: Number(imdbRating),
 			runtime: runTime.split(" ").at(0),
 			userRating: userRating,
+			countRatingDecisions: countRef.current,
 		};
 
 		handleAddMovie(newWatchedMovie);
 		onCloseMovie();
 	}
 
-	useEffect(
-		function () {
-			function callback(e) {
-				if (e.code === "Escape") {
-					onCloseMovie();
-				}
-			}
-
-			document.addEventListener("keydown", callback);
-
-			return function () {
-				document.removeEventListener("keydown", callback);
-			};
-		},
-		[onCloseMovie]
-	);
-
-	// console.log(title, year);
+	useKey("Escape", onCloseMovie);
 
 	useEffect(
 		function () {
@@ -223,148 +315,8 @@ function MovieDetails({
 				<p>Directed by {director}</p>
 			</section>
 
-			{selectedId}
+			{/* {selectedId} */}
 		</div>
-	);
-}
-
-export default function App() {
-	// const [movies, setMovies] = useState(tempMovieData);
-	// const [watched, setWatched] = useState(tempWatchedData);
-	const [movies, setMovies] = useState([]);
-	const [watched, setWatched] = useState([]);
-	const [isLoading, setIsLoading] = useState(true);
-	const [error, setError] = useState("");
-	const [query, setQuery] = useState("interstellar");
-	const [selectedId, setSelectedId] = useState(null);
-	// const tempQuery = "interstellar";
-	// const query = "ihbwreo8y";
-
-	/*
-	useEffect(function () {
-		console.debug("After initial render");
-	}, []);
-
-	useEffect(function () {
-		console.debug("During every render");
-	});
-
-	console.debug("During render");
-    */
-
-	function handleSelectMovie(id) {
-		setSelectedId((selectedId) =>
-			id === selectedId ? null : id
-		);
-	}
-
-	function handleCloseMovie() {
-		setSelectedId(null);
-	}
-
-	function handleAddMovie(movie) {
-		// if (length(watched.filter(m=> m.imdbID != m.imdbID)))
-		setWatched((watched) => [
-			...watched.filter((m) => m.imdbID !== movie.imdbID),
-			movie,
-		]);
-	}
-
-	useEffect(
-		function () {
-			const controller = new AbortController();
-
-			async function fetchMovies() {
-				try {
-					setIsLoading(true);
-					setError("");
-					const res = await fetch(
-						`http://www.omdbapi.com/?apikey=${API_KEY}&s=${query}`,
-						{ signal: controller.signal }
-					);
-					if (!res.ok)
-						throw new Error(
-							"Something went wrong with fetching movies"
-						);
-					const data = await res.json();
-					if (data.Response === "False")
-						throw new Error("Movie not found");
-					setMovies(data.Search);
-					setError("");
-				} catch (err) {
-					console.log(err);
-					if (err.name !== "AbortError") {
-						setError(err.message);
-					}
-				} finally {
-					setIsLoading(false);
-				}
-			}
-
-			if (query.length < 3) {
-				setMovies([]);
-				setError("");
-				return;
-			}
-
-			fetchMovies();
-
-			return function () {
-				controller.abort();
-			};
-		},
-		[query]
-	);
-
-	return (
-		<>
-			{/* component composition */}
-			<NavBar>
-				<Search
-					query={query}
-					setQuery={setQuery}
-				></Search>
-				<NumResults movies={movies}></NumResults>
-			</NavBar>
-			<Main>
-				{/* Or, you can define prop explicity and pass in that way */}
-				<Box>
-					{/* {isLoading ? (
-						<Loader />
-					) : (
-						<MovieList movies={movies}></MovieList>
-					)} */}
-					{isLoading && <Loader />}
-					{!isLoading && !error && (
-						<MovieList
-							movies={movies}
-							handleSelectMovie={handleSelectMovie}
-						/>
-					)}
-					{error && <ErrorMessage message={error} />}
-				</Box>
-				<Box>
-					{selectedId ? (
-						<MovieDetails
-							selectedId={selectedId}
-							onCloseMovie={handleCloseMovie}
-							handleAddMovie={handleAddMovie}
-							watched={watched}
-							key={`movie-details-${selectedId}`}
-						/>
-					) : (
-						<>
-							<WatchedSummary
-								watched={watched}
-							></WatchedSummary>
-							<WatchedMovieList
-								watched={watched}
-							></WatchedMovieList>
-						</>
-					)}
-				</Box>
-			</Main>
-		</>
 	);
 }
 
@@ -382,6 +334,16 @@ function ErrorMessage({ message }) {
 }
 
 function Search({ query, setQuery }) {
+	const inputEl = useRef(null);
+
+	useKey("Enter", () => {
+		if (document.activeElement === inputEl.current) {
+			return;
+		}
+		inputEl.current.focus();
+		setQuery("");
+	});
+
 	return (
 		<input
 			className='search'
@@ -389,6 +351,7 @@ function Search({ query, setQuery }) {
 			placeholder='Search movies...'
 			value={query}
 			onChange={(e) => setQuery(e.target.value)}
+			ref={inputEl}
 		/>
 	);
 }
